@@ -145,7 +145,7 @@ sub ipfsapi {
 # add,list,key,name,object,dag,block
 sub ipfsrun ($) { 
   my $cmd = shift;
-  print "// $cmd:\n", if $::dbug;
+  print "// $cmd:\n" if $::dbug;
   local *EXEC; open EXEC, 'ipfs '.$cmd.'|'; local $/ = "\n";
   my $mh = {};
   # -------------------------------------
@@ -187,6 +187,18 @@ sub ipfsrun ($) {
         chomp($buf);
      close EXEC;
      return $buf;
+
+  # -------------------------------------
+  } elsif ($cmd =~ m/^id/) {
+     my $addrs = [];
+     local $/ = "\n";
+     while (<EXEC>) {
+        chomp;
+        push @$addrs, $_;
+        die $_ if m/^Error/;
+     }
+     close EXEC;
+     return $addrs;
 
   # -------------------------------------
   } elsif ($cmd =~ m/^cat/) {

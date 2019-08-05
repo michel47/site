@@ -399,6 +399,18 @@ sub decode_base32z {
   my $bin = MIME::Base32::decode($b32);
   return $bin;
 }
+sub encode_base64m {
+  use MIME::Base64 qw();
+  my $m64 = MIME::Base64::encode_base64($_[0],'');
+  return $m64;
+}
+
+sub encode_base64u {
+  use MIME::Base64 qw();
+  my $u64 = MIME::Base64::encode_base64($_[0],'');
+  $u64 =~ y,+/,-_,;
+  return $u64;
+}
 # ----------------------------------
 sub encode_base42 { # for barcode
   use Math::BigInt;
