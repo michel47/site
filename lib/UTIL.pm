@@ -998,6 +998,7 @@ sub get_publicip {
  use LWP::UserAgent qw();
   my $ua = LWP::UserAgent->new();
   my $url = 'http://iph.heliohost.org/cgi-bin/ip.pl?fmt=yaml';
+     $ua->timeout(7);
   my $resp = $ua->get($url);
   my $ip;
   if ($resp->is_success) {
