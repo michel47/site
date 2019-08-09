@@ -1,6 +1,6 @@
 --- README.txt ---
 
-version: v1.2.4
-gitid: e390441
-qm: zdj7WZnwC3VztbdAZNPn1U6qHoH6gvapwpzST7ZWoEL3mnNr5
+version: v1.2.7
+gitid: 7d5b3d4
+qm: zdj7WkP3YhUy5LeVSuYN5KzvmPUh9pDjdECFFQNZfFtRpJm9u
 tic: $tic
