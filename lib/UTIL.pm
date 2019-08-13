@@ -70,9 +70,17 @@ if (__FILE__ eq $0) {
 
 # -----------------------------------------------------------------------
 sub nonl {
-  my $d = shift;
-  $d =~ s/\n/\\n/g;
-  return $d;
+  my $buf = $_[0];
+  $buf =~ s/\\n/\\\\n/g;
+  $buf =~ s/\n/\\n/g;
+  return $buf;
+}
+sub nl {
+  my $buf = $_[0];
+  $buf =~ s/\\\\n/{55799-ds}/g;
+  $buf =~ s/\\n/\n/g;
+  $buf =~ s/{55799-ds}/\\n/g;
+  return $buf;
 }
 # -----------------------------------------------------------------------
 sub enc { # replace special char with \{hex} code
