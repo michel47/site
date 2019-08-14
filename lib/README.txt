@@ -5,7 +5,7 @@ Perl Script and Modules
 [RELEASES_NOTES](RELEASE_NOTES.md)
 
 --&nbsp;
-<br>version: v1.2.9
-<br>gitid: bc8cf7b
-<br>qm: zdj7Wkf72KG1RrhUxDRewYH4Ah1ffA36dQtEXTeMtV4ivmBuH
+<br>version: $ver
+<br>gitid: $gitid
+<br>qm: $qm
 <br>tic: $tic
