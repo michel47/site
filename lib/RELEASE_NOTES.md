@@ -1,4 +1,4 @@
-# RELEASE_NOTES version: v1.2.9
+# RELEASE_NOTES version: v1.3.3
 
 now doing the remote push using ssh (changes in .git/config)
 
