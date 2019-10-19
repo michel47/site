@@ -3,4 +3,4 @@
 	url = https://github.com/michel47/bin.git
 [submodule "lib/Brewed"]
 	path = lib/Brewed
-	url = /home/iggy/GITrepo/site/lib/Brewed
+	url = https://github.com/michel47/Brewed.git
