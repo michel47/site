@@ -1,0 +1,5 @@
+# RELEASE_NOTES version: $ver
+
+added examples for KMAC.pm module (NIST-SP800-185)
+
+
