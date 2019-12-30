@@ -101,7 +101,7 @@ sub get_content {
   return $buf;
 }
 # -----------------------------------------------------
-sub ipms_api {
+sub ipfsapi {
 # ipfs config Addresses.API
    my $api_url;
    if ($ENV{HTTP_HOST} =~ m/heliohost/) {
