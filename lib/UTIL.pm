@@ -885,7 +885,7 @@ sub get_type { # to be expended with some AI and magic ...
   if ($type eq 'application/octet-stream') {
     my $p = rindex $file,'.';
     if ($p>0) {
-     $type = 'files/'.substr($file,$p+1);
+     $type = 'files/'.substr($file,$p+1); # use the extension
     }
   }
   return $type;
