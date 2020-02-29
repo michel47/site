@@ -110,7 +110,7 @@ sub ipfsapi {
       $api_url = sprintf'http://%s/api/v0/%%s?arg=%%s%%s','127.0.0.1:5001';
    }
    my $url = sprintf $api_url,@_;
-#  printf "X-api-url: %s<br>\n",$url;
+   #printf "X-api-url: %s\n",$url;
    my $content = '';
    use LWP::UserAgent qw();
    use MIME::Base64 qw(decode_base64);
@@ -128,18 +128,25 @@ sub ipfsapi {
 #     printf "X-Status: %s<br>\n",$resp->status_line;
       $content = $resp->decoded_content;
    } else {
-      print "<pre>";
       printf "X-api-url: %s\n",$url;
       printf "Status: %s\n",$resp->status_line;
       $content = $resp->decoded_content;
       local $/ = "\n";
       chomp($content);
       printf "Content: %s\n",$content;
-      print "</pre>\n";
+   }
+   if ($_[0] =~ m{^(?:cat|files/read)}) {
+     return $content;
    }
    use JSON qw(decode_json);
-   my $resp = &decode_json($content);
-   return $resp;
+   if ($content =~ m/{/) { # }
+      #printf "[DBUG] Content: %s\n",$content;
+      my $resp = &decode_json($content);
+      return $resp;
+   } else {
+      print "info: $_[0]\n" if ($dbug && ! $content);
+      return $content;
+   }
 }
 # -----------------------------------------------------
 # add,list,key,name,object,dag,block
