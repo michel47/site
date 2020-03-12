@@ -70,9 +70,12 @@ if (__FILE__ eq $0) {
 
 # -----------------------------------------------------------------------
 sub nonl {
-  my $buf = $_[0];
+  my $buf = shift;
   $buf =~ s/\\n/\\\\n/g;
   $buf =~ s/\n/\\n/g;
+  if (defined $_[1]) {
+   $buf = substr($buf,$_[0],$_[1]);
+  }
   return $buf;
 }
 sub nl {
@@ -156,7 +159,7 @@ sub encode_baser {
   my @e = ();
   while ($n->bcmp(0) == +1)  {
     my $c = Math::BigInt->new();
-    my ($n,$c) = $n->bdiv($radix);
+    ($n,$c) = $n->bdiv($radix);
     push @e, $c->numify;
   }
   return reverse @e;
@@ -192,7 +195,7 @@ sub encode_basex ($\@) {
   while (@radix) {
     my $radix = shift @radix;
     my $c = Math::BigInt->new();
-    my ($n,$c) = $n->bdiv($radix);
+    ($n,$c) = $n->bdiv($radix);
     push @e, $c->numify;
   }
   return @e; # /!\ not reverse
@@ -539,7 +542,7 @@ sub alphab {
 # -----------------------------------------------------------------------
 sub copy ($$) {
  my ($src,$trg) = @_;
- local *F1, *F2;
+ local (*F1, *F2);
  return undef unless -r $src;
  return undef if (-e $trg && ! -w $trg);
  open F2,'>',$trg or die "-w $trg $!"; binmode(F2);
@@ -816,7 +819,7 @@ sub rname { # extract rootname
   my $rname = shift;
   $rname =~ s,\\,/,g; # *nix style !
   my $s = rindex($rname,'/');
-  my $rname = substr($rname,$s+1);
+  $rname = substr($rname,$s+1);
   $rname =~ s/\.[^\.]+//;
   return $rname; 
 }
@@ -909,7 +912,7 @@ sub word { # 20^4 * 6^3 words (25bit worth of data ...)
       $n /= 20;
       $str .= $cs->[$c];
    #print "cs: $n -> $c -> $str\n";
-   my $c = $n % 6;
+      $c = $n % 6;
       $n /= 6;
       $str .= $vo->[$c];
    #print "vo: $n -> $c -> $str\n";
@@ -1003,6 +1006,25 @@ sub flower { # 26 flowers
 }
 # -----------------------------------------------------------------------
 sub get_publicip {
+ use LWP::UserAgent qw();
+  my $ua = LWP::UserAgent->new();
+  my $url = 'https://iph.heliohost.org/cgi-bin/remote_addr.pl';
+     $ua->timeout(7);
+  my $resp = $ua->get($url);
+  my $ip;
+  if ($resp->is_success) {
+    my $content = $resp->decoded_content;
+    chomp($content);
+    $ip = $content;
+  } else {
+    print "X-Error: ",$resp->status_line;
+    my $content = $resp->decoded_content;
+    $ip = '127.0.0.1';
+  }
+  return $ip;
+}
+# -----------------------------------------------------------------------
+sub get_loggedip {
  use LWP::UserAgent qw();
   my $ua = LWP::UserAgent->new();
   my $url = 'http://iph.heliohost.org/cgi-bin/ip.pl?fmt=yaml';
