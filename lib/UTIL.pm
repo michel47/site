@@ -824,15 +824,21 @@ sub fname { # extract filename etc...
     $fpath = Cwd::getcwd();
   }
   my $file = substr($f,$s+1);
-
   if (-d $f) {
     return ($fpath,$file);
   } else {
+  my $bname
   my $p = rindex($file,'.');
-  my $bname = ($p>0) ? substr($file,0,$p) : $file;
   my $ext = lc substr($file,$p+1);
      $ext =~ s/\~$//;
-
+  if ($p > 0) {
+    $bname = substr($file,0,$p);
+    $ext = lc substr($file,$p+1);
+    $ext =~ s/\~$//;
+  } else {
+    $bname = $file;
+    $ext = &get_ext($f);
+  }
   $bname =~ s/\s+\(\d+\)$//; # remove (1) in names ...
 
   return ($fpath,$file,$bname,$ext);
