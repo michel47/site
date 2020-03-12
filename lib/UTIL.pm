@@ -3,7 +3,7 @@
 # Note:
 #   This work has been done during my time at AHE
 # 
-# -- Copyright GCM, 2016,2017 --
+# -- Copyright GCM, 2016,2017,2018,2019,2020 --
 # 
 
 
@@ -35,8 +35,10 @@ my %time_zones = (
    $ENV{'TZ'} = 'PST2PDT';
    $ENV{'TZ'} = 'EST'; 
    $ENV{'TZ'} = 'CET'; # Central Europe
-   use POSIX qw(tzset);
-   tzset();
+   if (-e '/dev/null') {
+     eval "use POSIX qw(tzset);";
+     tzset(); # no tzset in windows
+   }
 }
 
 # The "use vars" and "$VERSION" statements seem to be required.
@@ -69,6 +71,13 @@ if (__FILE__ eq $0) {
 # =======================================================================
 
 # -----------------------------------------------------------------------
+sub hostname {
+  use Sys::Hostname qw();
+  my $hostname = &Sys::Hostname::hostname();
+  $hostname =~ s/DESKTOP-//;
+  return lc$hostname || 'localhost';
+}
+# -----------------------------------------------------------------------
 sub nonl {
   my $buf = shift;
   $buf =~ s/\\n/\\\\n/g;
@@ -97,7 +106,13 @@ sub urlenc {
  my $buf = shift;
  #$buf =~ tr/\000-\034\134\177-\377//d;
  #$buf =~ s/\</\&lt;/g; # XML safe !
- $buf =~ s/([\000-\032\`%?&\<\( \)\>\177-\377])/sprintf('%%%02X',ord($1))/eg; # html-ize
+ $buf =~ s/([\000-\032\`%?&\<\( \)\>\177-\377])/sprintf('%%%02X',ord($1))/eg; # html-ize (urlencoded)
+ return $buf;
+}
+sub urldec {
+ my $buf = shift;
+ $buf =~ s/\+/ /g;
+ $buf =~ s/%(..)/chr($1)/eg; # unhtml-ize (urldecoded)
  return $buf;
 }
 # -----------------------------------------------------------------------
@@ -415,6 +430,12 @@ sub encode_base64m {
   my $m64 = MIME::Base64::encode_base64($_[0],'');
   return $m64;
 }
+sub decode_base64m {
+  use MIME::Base64 qw();
+  my $bin = MIME::Base64::decode_base64($_[0]);
+  return $bin;
+}
+
 
 sub encode_base64u {
   use MIME::Base64 qw();
@@ -525,12 +546,16 @@ sub alphab {
 
   } elsif ($radix == 36) {
     $alphab = 'ABCDEFGHiJKLMNoPQRSTUVWXYZ0123456789'; 
-  } elsif ($radix <= 37) {
-    $alphab = '0123456789ABCDEFGHiJKLMNoPQRSTUVWXYZ.'; 
-  } elsif ($radix == 43) {
+  } elsif ($radix <= 38) {
+    $alphab = '0123456789ABCDEFGHiJKLMNoPQRSTUVWXYZ.-'; 
+  } elsif ($radix <= 40) {
+    $alphab = 'ABCDEFGHiJKLMNoPQRSTUVWXYZ0123456789-_.+';
+  } elsif ($radix <= 43) {
     $alphab = 'ABCDEFGHiJKLMNoPQRSTUVWXYZ0123456789 -+.$%*';
   } elsif ($radix == 58) {
     $alphab = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  } elsif ($radix == 62) {
+    $alphab = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
   } else { # n < 94
     $alphab = '-0123456789'. 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.
                              'abcdefghijklmnopqrstuwvxyz'.
@@ -557,6 +582,33 @@ sub copy ($$) {
  close F2;
  return $?;
 }
+# -----------------------------------------------------------------------
+sub dhash {
+   my $alg = shift;
+   use Digest qw();
+   my $msg = Digest->new($alg) or die $!;
+   $msg->add(join'',@_);
+   my $hash = $msg->digest();
+   $msg->reset;
+   $msg->add($hash);
+   $hash = $msg->digest();
+   return $hash;
+}
+# -----------------------------------------------------
+sub hashr {
+   my $alg = shift;
+   my $rnd = shift; # number of round to run ...
+   my $tmp = join('',@_);
+   use Crypt::Digest qw();
+   my $msg = Crypt::Digest->new($alg) or die $!;
+   for (1 .. $rnd) {
+      $msg->add($tmp);
+      $tmp = $msg->digest();
+      $msg->reset;
+      #printf "#%d tmp: %s\n",$_,unpack'H*',$tmp;
+   }
+   return $tmp
+}
 # -----------------------------------------------------
 sub shake { # use shake 128
   use Crypt::Digest::SHAKE;
@@ -577,6 +629,15 @@ sub get_shake { # use shake 256 because of ipfs' minimal length of 20Bytes
   $msg->addfile(*F);
   my $digest = $msg->done(($len+7)/8);
   return $digest;
+}
+# -----------------------------------------------------
+sub digest ($@) {
+ my $alg = shift;
+ use Digest qw();
+ my $msg = Digest->new($alg) or die $!;
+    $msg->add(join'',@_);
+ my $digest = $msg->digest();
+ return $digest; #bin form !
 }
 # -----------------------------------------------------
 sub get_digest ($@) {
@@ -600,6 +661,73 @@ sub githash {
     $msg->addfile(*F);
  my $digest = lc( $msg->hexdigest() );
  return $digest; #hex form !
+}
+# -----------------------------------------------------
+sub get_digestf ($@) {
+ my $alg = shift;
+ my $ns = (scalar @_ == 2) ? shift : undef;
+ use Crypt::Digest qw();
+ my $F = shift; seek($F,0,0);
+ my $msg = Crypt::Digest->new($alg) or die $!;
+    $msg->add($ns) if defined $ns;
+    $msg->addfile($F);
+ my $digest = $msg->digest();
+ return $digest; #bin form !
+}
+# -----------------------------------------------------
+sub get_qmhash { # IPFS' cidv0 : 
+   my $algo = shift;
+   my $mhfncode = { 'SHA256' => 0x12, 'SHA1' => 0x11, 'MD5' => 0xd5, 'ID' => 0x00, 'GIT' => 0x11};
+   my $mhfnsize = { 'SHA256' => 256, 'GIT' => 160, 'MD5' => 128};
+   local *F; open F,$_[0] or do { warn qq{"$_[0]": $!}; return undef };
+   binmode F unless $_[0] =~ m/\.txt/;
+   local $/ = undef; my $msg = <F>; close F;
+   my $data = &qmcontainer($msg);
+   my $hash = undef;
+   if ($algo eq 'GIT') {
+     my $hdr = sprintf 'blob %u\0',length($data);
+     $hash = &hashr($algo,1,$hdr,$data);
+   } else {
+     $hash = &hashr($algo,1,$data);
+   }
+   my $mh = pack'C',$mhfncode->{$algo}; # 0x12; 
+   my $hsize = $mhfnsize->{$algo}/8; # 256/8
+   my $mhash = join'',$mh,&varint($hsize),substr($hash,0,$hsize);
+   return $mhash;
+
+}
+sub qmcontainer {
+   my $msg = shift;
+   my $msize = length($msg);
+   my $payload = sprintf '%s%s',pack('C',(1<<3|0)),&varint(2); #f1.t0 : 2
+       $payload .= sprintf '%s%s%s',pack('C',(2<<3|2)),&varint($msize),$msg; # f2.t2: msg
+       $payload .= sprintf '%s%s',pack('C',(3<<3|0)),&varint($msize); # f1.t0: msize
+
+   my $data = sprintf "%s%s%s",pack('C',(1<<3|2)),&varint(length($payload)),$payload; # f1.t2
+   return $data;
+}
+
+sub get_qmhashf { # IPFS' cidv0 : 
+#   f1=id: t0=varint
+#   f2=data: t2=string  { Data1: { f1 Data2 Tsize3 }}
+
+   my $algo = shift;
+   my $mhfncode = { 'SHA256' => 0x12, 'SHA1' => 0x11, 'MD5' => 0xd5, 'ID' => 0x00, 'GIT' => 0x11};
+   my $mhfnsize = { 'SHA256' => 256, 'GIT' => 160, 'MD5' => 128};
+   local *F = shift; seek(F,0,0); local $/ = undef;
+   my $msg = <F>;
+   my $data = &qmcontainer($msg);
+   my $mh = pack'C',$mhfncode->{$algo}; # 0x12; 
+   my $hsize = $mhfnsize->{$algo}/8; # 256/8
+   my $hash = undef;
+   if ($algo eq 'GIT') {
+     my $hdr = sprintf 'blob %u\0',length($data);
+     $hash = &hashr($algo,1,$hdr,$data);
+   } else {
+     $hash = &hashr($algo,1,$data);
+   }
+   my $mhash = join'',$mh,&varint($hsize),substr($hash,0,$hsize);
+   return $mhash;
 }
 # -----------------------------------------------------
 # protobuf container :
@@ -735,6 +863,38 @@ sub bname { # extract basename etc...
 
 }
 # -----------------------------------------------------------------------
+sub get_ext {
+  my $file = shift;
+  my $ext = $1 if ($file =~ m/\.([^\.]+)/);
+  if (! $ext) {
+    my %ext = (
+    text => 'txt',
+    'application/octet-stream' => 'blob',
+    'application/x-perl' => 'pl'
+    );
+    my $type = &get_type($file);
+    if (exists $ext{$type}) {
+       $ext = $ext{$type};
+    } else {
+      $ext = ($type =~ m'/(?:x-)?(\w+)') ? $1 : 'ukn';
+    }
+  }
+  return $ext;
+}
+sub get_type { # to be expended with some AI and magic ...
+  my $file = shift;
+  use File::Type;
+  my $ft = File::Type->new();
+  my $type = $ft->checktype_filename($file);
+  if ($type eq 'application/octet-stream') {
+    my $p = rindex $file,'.';
+    if ($p>0) {
+     $type = 'files/'.substr($file,$p+1); # use the extension
+    }
+  }
+  return $type;
+}
+# -----------------------------------------------------------------------
 sub hdate { # return HTTP date (RFC-1123, RFC-2822) 
   my ($time,$delta) = @_;
   my $stamp = $time+$delta;
@@ -866,6 +1026,35 @@ sub etime {
   return (wantarray) ? ($etime,$ltime) : $etime;
 }
 # -----------------------------------------------------------------------
+sub hex2quint {
+  return join '-', map { u16toq ( hex('0x'.$_) ) } $_[0] =~ m/(.{4})/g;
+}
+sub u32quint {
+  my $u = shift;
+  #printf "%04x.%04x\n",$u>>16,$u&0xFFFF;
+  return u16toq(($u>>16) & 0xFFFF) . '-' . u16toq($u & 0xFFFF);
+}
+sub u16toq {
+   my $n = shift;
+  #printf "u2q(%04x) =\n",$n;
+   my $cons = [qw/ b d f g h j k l m n p r s t v z /]; # 16 consonants only -c -q -w -x
+   my $vow = [qw/ a i o u  /]; # 4 wovels only -e -y
+   my $s = '';
+      for my $i ( 1 .. 5 ) { # 5 letter words
+         if ($i & 1) { # consonant
+            $s .= $cons->[$n & 0xF];
+            $n >>= 4;
+            #printf " %d : %s\n",$i,$s;
+         } else { # vowel
+            $s .= $vow->[$n & 0x3];
+            $n >>= 2;
+            #printf " %d : %s\n",$i,$s;
+         }
+      }
+   #printf "%s.\n",$s;
+   return scalar reverse $s;
+}
+# -----------------------------------------------------
 # 7c => 31b worth of data ... (similar density than hex)
 sub word5 { # 20^4 * 26^3 words (4.5bit per letters)
  use integer;
@@ -887,7 +1076,7 @@ sub word5 { # 20^4 * 26^3 words (4.5bit per letters)
       $n /= 26;
       $str .= chr($a+$c);
       $odd=1;
-   } else {
+   #} else {
    #my $c = $n % 6;
    #   $n /= 6;
    #   $str .= $vo->[$c];
@@ -904,7 +1093,7 @@ sub word { # 20^4 * 6^3 words (25bit worth of data ...)
  my $cs = [qw ( b c d f g h j k l m n p q r s t v w x z )]; # 20
  my $str = '';
  if (1 && $n < 26) {
- $str = chr(ord('A') +$n%26);
+ $str = chr(ord('a') +$n%26);
  } else {
  $n -= 6;
  while ($n >= 20) {
@@ -1005,6 +1194,31 @@ sub flower { # 26 flowers
   return $flower;
 }
 # -----------------------------------------------------------------------
+sub get_firstline { # not really the first line, but line that after the 13th character !
+  my $file = shift; local *F; open F,'<',$file;
+  seek(F,13,0);
+  my $buf; read(F,$buf,80);
+  close F;
+  $buf =~ m/^.*?\n(.*)\n?/;
+  my $firstline = $1;
+  #print $firstline; exit -3;
+  return $firstline;
+}
+sub get_lastline { # assumed last line is not over 80chars
+  my $file = shift; local *F; open F,'<',$file;
+  seek(F,-82,2);
+  my $buf; read(F,$buf,82);
+  close F;
+  $buf =~ m/\s+(.*\n?)\s*$/;
+  my $lastline = $1;
+  return $lastline;
+}
+sub get_magic {
+  my $file = shift; local *F; open F,'<',$file;
+  my $magic; read(F,$magic,4); close F;
+  return $magic;
+}
+# -----------------------------------------------------------------------
 sub get_publicip {
  use LWP::UserAgent qw();
   my $ua = LWP::UserAgent->new();
@@ -1059,6 +1273,29 @@ sub get_localip {
     my $local_ip = $socket->sockhost;
 
     return $local_ip;
+}
+# -----------------------------------------------------------------------
+sub get_auth {
+   my ($host,$realm,$user) = @_;
+   my $clearf = $ENV{CLEARTEXT} || $ENV{HOME}.'/.secret/clear.sec';
+   return 'YW5vOm55bW91cw' unless -f $clearf;
+   local *F; open F,'<',$clearf;
+   while (<F>) { 
+     chomp($_);
+     print "$_\n" if $dbug;
+     if (m/^l/) {
+        my ($auth,$h) = split'@',&decode_base63(substr($_,1)),2;
+        next if $h ne $host;
+        my ($u,$p,$r) = split':',$auth,3;
+        next if $r ne $realm;
+        next if $u ne $user;
+        return &encode_base64m("$u:$p");
+     }
+     
+   }
+   close F;
+   return 'YWRtaW46cGFzc3dvcmQ';
+
 }
 # -----------------------------------------------------------------------
 1; # $Source: /my/perl/modules/UTIL.pm,v $
