@@ -101,13 +101,27 @@ sub get_content {
   return $buf;
 }
 # -----------------------------------------------------
+sub get_apihostport {
+  my $IPFS_PATH = $ENV{IPFS_PATH} || $ENV{HOME}.'/.ipfs';
+  my $conff = $IPFS_PATH . '/config';
+  local *CFG; open CFG,'<',$conff or warn $!;
+  local $/ = undef; my $buf = <CFG>; close CFG;
+  use JSON qw(decode_json);
+  my $json = decode_json($buf);
+  my $apiaddr = $json->{Addresses}{API};
+  my (undef,undef,$apihost,undef,$apiport) = split'/',$apiaddr,5;
+      $apihost = '127.0.0.1' if ($apihost eq '0.0.0.0');
+  return ($apihost,$apiport);
+}
+# -----------------------------------------------------
 sub ipfsapi {
 # ipfs config Addresses.API
    my $api_url;
    if ($ENV{HTTP_HOST} =~ m/heliohost/) {
       $api_url = sprintf'https://%s/api/v0/%%s?arg=%%s%%s','ipfs.blockringtm.ml';
    } else {
-      $api_url = sprintf'http://%s/api/v0/%%s?arg=%%s%%s','127.0.0.1:5001';
+      my ($apihost,$apiport) = &get_apihostport();
+      $api_url = sprintf'http://%s:%s/api/v0/%%s?arg=%%s%%s',$apihost,$apiport;
    }
    my $url = sprintf $api_url,@_;
    #printf "X-api-url: %s\n",$url;

@@ -827,7 +827,7 @@ sub fname { # extract filename etc...
   if (-d $f) {
     return ($fpath,$file);
   } else {
-  my $bname
+  my $bname;
   my $p = rindex($file,'.');
   my $ext = lc substr($file,$p+1);
      $ext =~ s/\~$//;
