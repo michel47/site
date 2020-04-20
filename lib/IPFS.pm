@@ -147,7 +147,7 @@ sub ipfsapi {
       $content = $resp->decoded_content;
       local $/ = "\n";
       chomp($content);
-      printf "Content: %s\n",$content;
+      printf "Content: '%s'\n",$content;
    }
    if ($_[0] =~ m{^(?:cat|files/read)}) {
      return $content;
