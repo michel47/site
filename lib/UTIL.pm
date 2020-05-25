@@ -106,13 +106,17 @@ sub urlenc {
  my $buf = shift;
  #$buf =~ tr/\000-\034\134\177-\377//d;
  #$buf =~ s/\</\&lt;/g; # XML safe !
- $buf =~ s/([\000-\032\`%?&\<\( \)\>\177-\377])/sprintf('%%%02X',ord($1))/eg; # html-ize (urlencoded)
+ if ($buf =~ /[a-z]/) {
+   $buf =~ s/([\000-\032\`%?&\<\( \)\>\177-\377])/sprintf('%%%02X',ord($1))/eg; # html-ize (urlencoded)
+ } else {
+   $buf =~ s/(.)/sprintf('%%%02X',ord($1))/eg; # html-ize it all (urlencoded)
+ }
  return $buf;
 }
 sub urldec {
  my $buf = shift;
  $buf =~ s/\+/ /g;
- $buf =~ s/%(..)/chr($1)/eg; # unhtml-ize (urldecoded)
+ $buf =~ s/%(..)/chr(hex($1))/eg; # unhtml-ize (urldecoded)
  return $buf;
 }
 # -----------------------------------------------------------------------
@@ -161,7 +165,7 @@ sub decode_base58 {
   use Encode::Base58::BigInt qw();
   my $s = $_[0];
   # $e58 =~ tr/a-km-zA-HJ-NP-Z/A-HJ-NP-Za-km-z/;
-  $s =~ tr/A-HJ-NP-Za-km-z/a-km-zA-HJ-NP-Z/;
+  $s =~ tr/A-HJ-NP-Za-km-zIO0l/a-km-zA-HJ-NP-ZiooL/;
   my $bint = Encode::Base58::BigInt::decode_base58($s);
   my $bin = Math::BigInt->new($bint)->as_bytes();
   return $bin;
@@ -221,21 +225,6 @@ sub decode_basex (\@\@) {
   my ($s,@radix) = @_;
   # TBD
   return undef;
-}
-# -----------------------------------------------------------------------
-sub hashr {
-   my $alg = shift;
-   my $rnd = shift; # number of round to run ...
-   my $tmp = join('',@_);
-   use Crypt::Digest qw();
-   my $msg = Crypt::Digest->new($alg) or die $!;
-   for (1 .. $rnd) {
-      $msg->add($tmp);
-      $tmp = $msg->digest();
-      $msg->reset;
-      #printf "#%d tmp: %s\n",$_,unpack'H*',$tmp;
-   }
-   return $tmp
 }
 # ---------------------------------------------------------------------------
 # 0.........1.........2.........3.........4.........5.........6.........7
@@ -401,6 +390,39 @@ sub basen { # int -> str, radix <= 43;
   return scalar reverse $e;
 }
 # -----------------------------------------------------------------------
+sub encode_base12 {
+  use Math::BigInt;
+  my $bin = join'',@_;
+  my $n = Math::BigInt->from_bytes($bin);
+  my $e = '';
+  while ($n->bcmp(0) == +1)  {
+    my $c = Math::BigInt->new();
+    ($n,$c) = $n->bdiv(12);
+    $e .= chr(0x30 + $c->numify); # 0x30: 0 included
+  }
+  $e =~ y/0-9:;/0-9XE/;
+  return scalar reverse $e;
+}
+# ---
+sub decode_base12 {
+  use Math::BigInt;
+  my ($s) = @_;
+  #       012345.0123456.012345678.01.01 012345.0123456.012345678.01.01
+  $s =~ y/AIOTUX.BCDEFGH.JKLMNPQRS.VW.YZ/::::::.;;;;;;;.;;;;;;;;;.;;.;;/;
+  my $n = Math::BigInt->new(0);
+  my $j = Math::BigInt->new(1);
+  while($s ne '') {
+    my $c = substr($s,-1,1,''); # consume chr from the end !
+    my $i = ord($c);
+    my $w = $j->copy();
+       $w->bmul($i);
+    $n->badd($w);
+    $j->bmul(12);
+  }
+  my $d = $n->as_bytes();
+  return $d;
+}
+# ---
 sub encode_base32 {
   use MIME::Base32 qw();
   my $mh32 = uc MIME::Base32::encode($_[0]);
@@ -435,7 +457,6 @@ sub decode_base64m {
   my $bin = MIME::Base64::decode_base64($_[0]);
   return $bin;
 }
-
 
 sub encode_base64u {
   use MIME::Base64 qw();
@@ -534,6 +555,8 @@ sub alphab {
   my $alphab;
   if ($radix < 12) {
     $alphab = '0123456789-';
+  } elsif ($radix == 12) {
+    $alphab = '0123456789XE';
   } elsif ($radix <= 16) {
     $alphab = '0123456789ABCDEF';
   } elsif ($radix <= 26) {
@@ -592,6 +615,39 @@ sub dhash {
    $msg->reset;
    $msg->add($hash);
    $hash = $msg->digest();
+   return $hash;
+}
+# -----------------------------------------------------
+sub khash { # keyed hash
+   use Crypt::Digest qw();
+   my $alg = shift;
+   my $data = join'',@_;
+   my $msg = Crypt::Digest->new($alg) or die $!;
+      $msg->add($data);
+   my $hash = $msg->digest();
+   return $hash;
+}
+sub get_khash {
+   use Crypt::Digest qw();
+   my $alg = shift;
+   my $file = pop;
+   my $data = join'',@_;
+  local *F; open F,$file or do { warn qq{"$file": $!}; return undef };
+  #binmode F unless $file =~ m/\.txt/;
+  my $msg = Crypt::Digest::new($alg);
+     $msg->add($data);
+     $msg->addfile(*F);
+   my $hash = $msg->digest();
+   return $hash;
+}
+# -----------------------------------------------------
+sub hash1 { # keyed hash
+   use Crypt::Digest qw();
+   my $alg = shift;
+   my $data = join'',@_;
+   my $msg = Crypt::Digest->new($alg) or die $!;
+      $msg->add($data);
+   my $hash = $msg->digest();
    return $hash;
 }
 # -----------------------------------------------------
@@ -685,7 +741,7 @@ sub get_qmhash { # IPFS' cidv0 :
    my $data = &qmcontainer($msg);
    my $hash = undef;
    if ($algo eq 'GIT') {
-     my $hdr = sprintf 'blob %u\0',length($data);
+     my $hdr = sprintf "blob %u\0",length($data);
      $hash = &hashr($algo,1,$hdr,$data);
    } else {
      $hash = &hashr($algo,1,$data);
